@@ -152,7 +152,7 @@ td.placement:hover { color: var(--accent); }
 <p class="meta">
   2026年6月21日(日) 東京都大田区産業プラザPiO<br>
   元データ: <a href="https://www.lovefes.info/260621list.html" target="_blank">lovefes.info</a>
-  （取得日時: 2026年06月03日 06:44 JST） ／
+  （取得日時: 2026年06月03日 07:08 JST） ／
   このページは表記ゆれ修正・リンク修正を加えた非公式リストです。
 </p>
 
@@ -673,26 +673,27 @@ function onSpaceLeave() {
 
 // ── List mode: placement hover → mini-map ─────
 const popup = document.getElementById('minimap-popup');
+let mouseX = 0, mouseY = 0;
+document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
 
-function showMinimap(code, anchorEl) {
+function showMinimap(code) {
   if (!code || !(code in SPACES)) { popup.style.display = 'none'; return; }
   const miniSvg = document.getElementById('minimapSvg');
   highlightSpace(code, miniSvg);
-  // scroll the minimap viewport to show the highlighted space
-  const [sx, sy] = SPACES[code];
-  // viewBox shift: center on the space, scaled
-  const scale = 204/680;
-  const vx = Math.max(0, sx - 340/2);
-  const vy = Math.max(0, sy - 480/2);
-  // just show the full map (small enough at 204px)
-  miniSvg.setAttribute('viewBox', '0 0 680 960');
-  // position popup
-  const rect = anchorEl.getBoundingClientRect();
-  const px = Math.min(rect.right + 8, window.innerWidth - 220);
-  const py = Math.max(8, rect.top + window.scrollY - 100);
+  positionPopup();
+  popup.style.display = 'block';
+}
+
+function positionPopup() {
+  const pw = popup.offsetWidth  || 216;
+  const ph = popup.offsetHeight || 296;
+  const margin = 16;
+  let px = mouseX + margin;
+  let py = mouseY + margin;
+  if (px + pw > window.innerWidth  - 4) px = mouseX - pw - margin;
+  if (py + ph > window.innerHeight - 4) py = mouseY - ph - margin;
   popup.style.left = `${px}px`;
   popup.style.top  = `${py}px`;
-  popup.style.display = 'block';
 }
 
 function hideMinimap() {
@@ -707,20 +708,24 @@ function bindTableHover() {
     const placementTd = tr.querySelectorAll('td')[1];
     if (!placementTd) return;
     const raw = placementTd.dataset.sort || '';
-    tr.addEventListener('mouseenter', () => { showMinimap(raw, tr); });
+    tr.addEventListener('mouseenter', () => showMinimap(raw));
+    tr.addEventListener('mousemove',  positionPopup);
     tr.addEventListener('mouseleave', hideMinimap);
   });
 }
 
 // ── Mode switching ────────────────────────────
 function switchMode(mode) {
-  document.getElementById('view-list').style.display = mode === 'list' ? '' : 'none';
-  document.getElementById('view-map').style.display  = mode === 'map'  ? '' : 'none';
+  document.getElementById('view-list').style.display = mode === 'list' ? 'block' : 'none';
+  document.getElementById('view-map').style.display  = mode === 'map'  ? 'block' : 'none';
   document.getElementById('tab-list').classList.toggle('active', mode === 'list');
   document.getElementById('tab-map').classList.toggle('active',  mode === 'map');
-  if (mode === 'map' && !document.getElementById('mainMapSvg').firstChild) {
-    buildMapSVG(document.getElementById('mainMapSvg'));
-    attachMapEvents();
+  if (mode === 'map') {
+    const mainSvg = document.getElementById('mainMapSvg');
+    if (!mainSvg.firstChild) {
+      buildMapSVG(mainSvg);
+      attachMapEvents();
+    }
   }
   hideMinimap();
 }
