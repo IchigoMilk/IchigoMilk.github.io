@@ -119,6 +119,11 @@ td.placement:hover { color: var(--accent); }
 }
 #map-info h3 { color: var(--accent); font-size: 1rem; margin-bottom: .5rem; }
 #map-info-hint { color: #aaa; font-size: .82rem; }
+.map-lock-hint {
+  font-size: .75rem; color: var(--accent); background: #fff0f8;
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 2px 7px; margin-bottom: .5rem; display: none;
+}
 .info-row { margin-bottom: .3rem; }
 .info-label { font-size: .74rem; color: #888; }
 .info-val { font-weight: bold; }
@@ -129,6 +134,7 @@ td.placement:hover { color: var(--accent); }
 .sp.occupied { fill: var(--sp-occupied); }
 .sp.empty    { fill: var(--sp-empty); }
 .sp.active   { fill: var(--sp-active) !important; stroke: var(--accent-dark); stroke-width: 1.5; }
+.ops-active  { fill: var(--sp-active) !important; stroke: var(--accent-dark); stroke-width: 1.5; }
 .sp:hover    { opacity: .75; }
 .hall-outline { fill: none; stroke: #555; stroke-width: 2; }
 .fac-box { fill: #eaf7fb; stroke: #99d; stroke-width: 1; }
@@ -152,7 +158,7 @@ td.placement:hover { color: var(--accent); }
 <p class="meta">
   2026年6月21日(日) 東京都大田区産業プラザPiO<br>
   元データ: <a href="https://www.lovefes.info/260621list.html" target="_blank">lovefes.info</a>
-  （取得日時: 2026年06月03日 07:08 JST） ／
+  （取得日時: 2026年06月03日 07:16 JST） ／
   このページは表記ゆれ修正・リンク修正を加えた非公式リストです。
 </p>
 
@@ -412,7 +418,8 @@ td.placement:hover { color: var(--accent); }
            style="border-radius:6px;border:1px solid var(--border);background:#fafafa"></svg>
     </div>
     <div id="map-info">
-      <p id="map-info-hint">スペースにカーソルを合わせると<br>サークル情報が表示されます</p>
+      <p id="map-info-hint">スペースにカーソルを合わせると<br>サークル情報が表示されます<br><span style="font-size:.75rem">クリックで表示を固定できます</span></p>
+      <div class="map-lock-hint" id="map-lock-hint">🔒 固定中 — もう一度クリックで解除</div>
       <div id="map-info-content" style="display:none">
         <h3 id="mi-circle"></h3>
         <div class="info-row"><span class="info-label">配置</span><br><span class="info-val" id="mi-placement"></span></div>
@@ -426,7 +433,7 @@ td.placement:hover { color: var(--accent); }
 
 <!-- ── MINIMAP POPUP ── -->
 <div id="minimap-popup" aria-hidden="true">
-  <svg id="minimapSvg" viewBox="0 0 680 960" width="204" height="288"></svg>
+  <svg id="minimapSvg" viewBox="0 0 680 960" width="340" height="480"></svg>
 </div>
 
 <!-- ── DATA ── -->
@@ -450,13 +457,14 @@ CIRCLES.forEach(c => {
 const SVG_W = 680, SVG_H = 960;
 const HALL  = {x:30, y:40, w:620, h:895};
 
-// Facility overlays [x, y, w, h, label, cls]
+// Facility overlays [x, y, w, h, label, cls, id?]
 const FACILITIES = [
-  [38,  48, 90,  72, '男子\n更衣室',    'fac-box'],
-  [148, 48, 195, 72, '女子更衣室',      'fac-box'],
-  [38, 137, 130, 50, 'コスプレ\n撮影受付','fac-box'],
-  [490,137, 125, 50, 'メロン\nブックス', 'fac-box'],
-  [310,415, 285,300, '運営本部\n・受付・\n委託販売', 'fac-ops'],
+  [38,  48, 90,  72, '男子\n更衣室',          'fac-box', null],
+  [148, 48, 195, 72, '女子更衣室',             'fac-box', null],
+  [38, 137, 130, 50, 'コスプレ\n撮影受付',     'fac-box', null],
+  [490,137, 125, 50, 'メロン\nブックス',       'fac-box', null],
+  // 運営本部: J(y=250-288) と C(y=620) の間、右サブブロック(x=527)とC/J列(x=605)の間
+  [530,305,  72,312, '運営本部\n見本誌受付\n受付\n委託販売', 'fac-ops', 'fac-ops-rect'],
 ];
 
 // Row block backgrounds [type, bx_or_cx, by_or_cy, row_label]
@@ -511,9 +519,11 @@ function buildMapSVG(svgEl_) {
   }));
 
   // facility boxes
-  FACILITIES.forEach(([x,y,w,h,lbl,cls]) => {
+  FACILITIES.forEach(([x,y,w,h,lbl,cls,fid]) => {
     const g = svgEl('g', {});
-    g.appendChild(svgEl('rect', {x,y,width:w,height:h,rx:3,class:cls}));
+    const rAttrs = {x,y,width:w,height:h,rx:3,class:cls};
+    if (fid) rAttrs.id = fid;
+    g.appendChild(svgEl('rect', rAttrs));
     const cx = x + w/2, cy = y + h/2;
     const lines = lbl.split('\n');
     const startDy = -(lines.length-1)*0.55 + 'em';
@@ -570,9 +580,9 @@ function buildMapSVG(svgEl_) {
     }
   });
 
-  // entrance label
+  // 出入口: J(y=288)直下、運営本部(y=305)直上
   const eT = svgEl_.appendChild(svgEl('text', {
-    x:600, y:920, class:'entrance-label', 'text-anchor':'middle'
+    x:567, y:300, class:'entrance-label', 'text-anchor':'middle'
   }));
   eT.textContent = '▼ 出入口';
 
@@ -605,37 +615,37 @@ function buildMapSVG(svgEl_) {
 let activeCode = null;
 
 function highlightSpace(code, svgRoot) {
-  // clear previous in this svg
+  // clear all highlights in this svg
   svgRoot.querySelectorAll('.sp.active').forEach(el => el.classList.remove('active'));
-  svgRoot.querySelectorAll('.sp-num.active').forEach(el => el.classList.remove('active'));
+  const opsRect = svgRoot.querySelector('#fac-ops-rect');
+  if (opsRect) opsRect.classList.remove('ops-active');
+
   if (!code) return;
-  const el = svgRoot.querySelector(`#sp-${CSS.escape(code)}`);
-  if (el) {
-    el.classList.add('active');
-    // bring to front
-    svgRoot.appendChild(el);
+
+  if (code === '委託') {
+    if (opsRect) opsRect.classList.add('ops-active');
+    return;
   }
-  const tn = svgRoot.querySelector(`#spn-${CSS.escape(code)}`);
-  if (tn) tn.classList.add('active');
+
+  const el = svgRoot.querySelector(`#sp-${CSS.escape(code)}`);
+  // NOTE: do NOT reorder (no appendChild) — sp-num text layer must stay on top
+  if (el) el.classList.add('active');
 }
 
 function clearHighlight() {
   ['mainMapSvg','minimapSvg'].forEach(id => {
     const svg = document.getElementById(id);
-    if (svg) {
-      svg.querySelectorAll('.sp.active').forEach(el => el.classList.remove('active'));
-      svg.querySelectorAll('.sp-num.active').forEach(el => el.classList.remove('active'));
-    }
+    if (svg) highlightSpace(null, svg);
   });
   activeCode = null;
 }
 
-// ── Map mode: space hover ─────────────────────
-function onSpaceEnter(code) {
-  activeCode = code;
-  highlightSpace(code, document.getElementById('mainMapSvg'));
+// ── Map mode: space hover / click ────────────
+let lockedCode = null;
+
+function showCircleInfo(code) {
   const circle = spaceToCircle[code];
-  const hint = document.getElementById('map-info-hint');
+  const hint    = document.getElementById('map-info-hint');
   const content = document.getElementById('map-info-content');
   if (circle) {
     hint.style.display = 'none';
@@ -656,6 +666,14 @@ function onSpaceEnter(code) {
     mkLink(circle.web,     'Web',   'link-web');
     mkLink(circle.twitter, 'X',     'link-twitter');
     mkLink(circle.pixiv,   'Pixiv', 'link-pixiv');
+  } else if (code === '委託') {
+    hint.style.display = 'none';
+    content.style.display = 'block';
+    document.getElementById('mi-circle').textContent    = '委託販売スペース';
+    document.getElementById('mi-placement').textContent = '運営本部';
+    document.getElementById('mi-penname').textContent   = '';
+    document.getElementById('mi-original').textContent  = '';
+    document.getElementById('mi-links').innerHTML = '';
   } else {
     hint.style.display = 'block';
     hint.textContent = `${code}：サークルなし`;
@@ -663,12 +681,39 @@ function onSpaceEnter(code) {
   }
 }
 
-function onSpaceLeave() {
-  clearHighlight();
-  const hint = document.getElementById('map-info-hint');
-  hint.style.display = 'block';
-  hint.textContent = 'スペースにカーソルを合わせると\nサークル情報が表示されます';
+function resetInfoPanel() {
+  document.getElementById('map-info-hint').style.display = 'block';
+  document.getElementById('map-info-hint').innerHTML =
+    'スペースにカーソルを合わせると<br>サークル情報が表示されます<br><span style="font-size:.75rem">クリックで表示を固定できます</span>';
   document.getElementById('map-info-content').style.display = 'none';
+  document.getElementById('map-lock-hint').style.display = 'none';
+}
+
+function onSpaceEnter(code) {
+  if (lockedCode !== null && lockedCode !== code) return;
+  activeCode = code;
+  highlightSpace(code, document.getElementById('mainMapSvg'));
+  showCircleInfo(code);
+}
+
+function onSpaceLeave() {
+  if (lockedCode !== null) return;
+  clearHighlight();
+  resetInfoPanel();
+}
+
+function onSpaceClick(code) {
+  if (lockedCode === code) {
+    // unlock
+    lockedCode = null;
+    clearHighlight();
+    resetInfoPanel();
+  } else {
+    lockedCode = code;
+    highlightSpace(code, document.getElementById('mainMapSvg'));
+    showCircleInfo(code);
+    document.getElementById('map-lock-hint').style.display = 'block';
+  }
 }
 
 // ── List mode: placement hover → mini-map ─────
@@ -677,16 +722,20 @@ let mouseX = 0, mouseY = 0;
 document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
 
 function showMinimap(code) {
-  if (!code || !(code in SPACES)) { popup.style.display = 'none'; return; }
+  // 委託配置は ops booth を光らせる
+  const effectiveCode = (code === '委託') ? '委託' : code;
+  if (!effectiveCode || (effectiveCode !== '委託' && !(effectiveCode in SPACES))) {
+    popup.style.display = 'none'; return;
+  }
   const miniSvg = document.getElementById('minimapSvg');
-  highlightSpace(code, miniSvg);
+  highlightSpace(effectiveCode, miniSvg);
   positionPopup();
   popup.style.display = 'block';
 }
 
 function positionPopup() {
-  const pw = popup.offsetWidth  || 216;
-  const ph = popup.offsetHeight || 296;
+  const pw = popup.offsetWidth  || 352;
+  const ph = popup.offsetHeight || 492;
   const margin = 16;
   let px = mouseX + margin;
   let py = mouseY + margin;
@@ -731,11 +780,28 @@ function switchMode(mode) {
 }
 
 function attachMapEvents() {
-  document.getElementById('mainMapSvg').querySelectorAll('.sp').forEach(el => {
+  const mainSvg = document.getElementById('mainMapSvg');
+  mainSvg.querySelectorAll('.sp').forEach(el => {
     const code = el.dataset.code;
     el.addEventListener('mouseenter', () => onSpaceEnter(code));
     el.addEventListener('mouseleave', onSpaceLeave);
-    el.addEventListener('click', () => onSpaceEnter(code));
+    el.addEventListener('click',      e => { e.stopPropagation(); onSpaceClick(code); });
+  });
+  // click on ops booth → treat as 委託
+  const opsRect = mainSvg.querySelector('#fac-ops-rect');
+  if (opsRect) {
+    opsRect.style.cursor = 'pointer';
+    opsRect.addEventListener('mouseenter', () => onSpaceEnter('委託'));
+    opsRect.addEventListener('mouseleave', onSpaceLeave);
+    opsRect.addEventListener('click', e => { e.stopPropagation(); onSpaceClick('委託'); });
+  }
+  // click on background → unlock
+  mainSvg.addEventListener('click', () => {
+    if (lockedCode !== null) {
+      lockedCode = null;
+      clearHighlight();
+      resetInfoPanel();
+    }
   });
 }
 
